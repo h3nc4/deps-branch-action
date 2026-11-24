@@ -45,15 +45,37 @@ promote() {
 		return
 	fi
 	state="$(gh pr view "${number}" -R "${repo}" --json mergeStateStatus --jq .mergeStateStatus)"
-	passed="$(gh pr checks "${number}" -R "${repo}" --json bucket \
-		--jq '[.[].bucket] | length > 0 and all(. == "pass" or . == "skipping")')" || passed=false
-	if [ "${state}" != CLEAN ] || [ "${passed}" != true ]; then
+	case "${state}" in
+	BLOCKED | DIRTY | BEHIND | DRAFT)
 		printf '%s\n' "${out}" >&2
-		echo "::error::could not turn on auto-merge for #${number}, which is ${state} with checks passed=${passed}"
+		echo "::error::could not turn on auto-merge for #${number}, which is ${state}"
 		exit 1
+		;;
+	*) ;;
+	esac
+	# GitHub refuses auto-merge where the default branch doesn't require checks, so wait for the checks here instead.
+	poll="${DEPS_POLL_SECONDS:-30}"
+	tries=0
+	count=0
+	while :; do
+		count="$(gh pr checks "${number}" -R "${repo}" --json bucket --jq length 2>/dev/null)" || count=0
+		[ "${count}" -gt 0 ] || [ "${tries}" -ge 10 ] && break
+		tries=$((tries + 1))
+		sleep "${poll}"
+	done
+	if [ "${count}" -gt 0 ]; then
+		timeout 3600 gh pr checks "${number}" -R "${repo}" --watch --interval "${poll}" >/dev/null 2>&1 || :
+		passed="$(gh pr checks "${number}" -R "${repo}" --json bucket \
+			--jq '[.[].bucket] | all(. == "pass" or . == "skipping")')" || passed=false
+		if [ "${passed}" != true ]; then
+			echo "::error::#${number} has checks that did not pass, so it is not merged"
+			exit 1
+		fi
+	else
+		echo "::notice::#${number} does not start any check, and every update in it passed its own"
 	fi
 	gh pr merge "${number}" -R "${repo}" --squash --subject "${title} (#${number})" --body ""
-	echo "::notice::#${number} had already passed its checks, so it is merged now"
+	echo "::notice::#${number} is merged"
 }
 
 case "${GITHUB_EVENT_NAME:?}" in

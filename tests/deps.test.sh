@@ -24,6 +24,8 @@ case "$*" in
 "pr view"*mergeStateStatus*) echo "${STUB_STATE:-BLOCKED}" ;;
 "pr view"*) echo "${STUB_TITLE:-update dependencies for week 48}" ;;
 "pr merge"*--auto*) [ "${STUB_AUTO_FAIL:-no}" = no ] || { echo "auto-merge refused" >&2; exit 1; } ;;
+"pr checks"*"--jq length"*) echo "${STUB_COUNT:-2}" ;;
+"pr checks"*--watch*) ;;
 "pr checks"*) echo "${STUB_CHECKS:-true}" ;;
 *) ;;
 esac
@@ -40,7 +42,7 @@ run() {
   : >"${log}"
   status=0
   env PATH="${stub}:${PATH}" STUB_LOG="${log}" GITHUB_REPOSITORY=h3nc4/app \
-    GITHUB_EVENT_NAME="${event}" "$@" sh "${script}" >"${stub}/out" 2>&1 || status=$?
+    GITHUB_EVENT_NAME="${event}" DEPS_POLL_SECONDS=0 "$@" sh "${script}" >"${stub}/out" 2>&1 || status=$?
   ok=yes
   [ "${status}" = "${want_status}" ] || ok="exit ${status}, wanted ${want_status}"
   if [ "${ok}" = yes ] && [ "${want}" != - ] && ! grep -qF -- "${want}" "${log}"; then
@@ -68,7 +70,10 @@ run dispatch_syncs_before_promoting workflow_dispatch 0 "merges -f base=deps -f 
 run promotion_never_deletes_deps schedule 0 "--auto --squash" "--delete-branch" STUB_FILES=1
 run other_event_is_refused pull_request 1 - "merges"
 run passed_promotion_merges_directly schedule 0 "pr merge 7 -R h3nc4/app --squash --subject" - STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_CHECKS=true
-run unchecked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_CHECKS=false
+run unchecked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_COUNT=2 STUB_CHECKS=false
+run checkless_promotion_merges schedule 0 "pr merge 7 -R h3nc4/app --squash --subject" - STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_COUNT=0
+run pending_promotion_waits_then_merges schedule 0 "pr checks 7 -R h3nc4/app --watch" - STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=UNSTABLE
+run conflicted_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=DIRTY
 run blocked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=BLOCKED
 
 echo "deps.test.sh: ${failed} failures"
