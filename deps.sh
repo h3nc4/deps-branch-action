@@ -24,22 +24,43 @@ sync() {
 	echo "::notice::${branch} contains ${base}"
 }
 
-promote() {
+# Prints the open pull request from the branch, opening a draft first when there is none. Prints nothing when the branch adds nothing.
+open_pr() {
 	files="$(gh api "repos/${repo}/compare/${base}...${branch}" --jq '.files | length')"
-	if [ "${files}" = 0 ]; then
-		echo "::notice::${branch} adds nothing to ${base}"
-		return
-	fi
+	[ "${files}" != 0 ] || return 0
 	number="$(gh pr list -R "${repo}" --head "${branch}" --base "${base}" --state open \
 		--json number --jq '.[0].number // empty')"
 	if [ -z "${number}" ]; then
-		week="$(date -u +%V)"
-		url="$(gh pr create -R "${repo}" --head "${branch}" --base "${base}" \
-			--title "update dependencies for week ${week#0}" \
+		url="$(gh pr create -R "${repo}" --head "${branch}" --base "${base}" --draft \
+			--title "update dependencies" \
 			--body "Promotes the dependency updates merged into ${branch} since the last promotion.")"
 		number="${url##*/}"
 	fi
-	title="$(gh pr view "${number}" -R "${repo}" --json title --jq .title)"
+	echo "${number}"
+}
+
+collect() {
+	number="$(open_pr)"
+	if [ -z "${number}" ]; then
+		echo "::notice::${branch} adds nothing to ${base}"
+		return
+	fi
+	echo "::notice::#${number} collects ${branch} until the weekly promotion"
+}
+
+promote() {
+	number="$(open_pr)"
+	if [ -z "${number}" ]; then
+		echo "::notice::${branch} adds nothing to ${base}"
+		return
+	fi
+	week="$(date -u +%V)"
+	title="update dependencies for week ${week#0}"
+	gh pr edit "${number}" -R "${repo}" --title "${title}" >/dev/null
+	draft="$(gh pr view "${number}" -R "${repo}" --json isDraft --jq .isDraft)"
+	if [ "${draft}" = true ]; then
+		gh pr ready "${number}" -R "${repo}"
+	fi
 	if out="$(gh pr merge "${number}" -R "${repo}" --auto --squash --subject "${title} (#${number})" --body "" 2>&1)"; then
 		echo "::notice::#${number} merges itself once its checks pass"
 		return
@@ -79,7 +100,13 @@ promote() {
 }
 
 case "${GITHUB_EVENT_NAME:?}" in
-push) sync ;;
+push)
+	if [ "${GITHUB_REF:-}" = "refs/heads/${branch}" ]; then
+		collect
+	else
+		sync
+	fi
+	;;
 schedule | workflow_dispatch)
 	sync
 	promote

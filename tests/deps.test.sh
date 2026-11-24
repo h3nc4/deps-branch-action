@@ -22,7 +22,7 @@ case "$*" in
 "pr list"*) echo "${STUB_PR:-}" ;;
 "pr create"*) echo "https://github.com/h3nc4/app/pull/42" ;;
 "pr view"*mergeStateStatus*) echo "${STUB_STATE:-BLOCKED}" ;;
-"pr view"*) echo "${STUB_TITLE:-update dependencies for week 48}" ;;
+"pr view"*isDraft*) echo "${STUB_DRAFT:-false}" ;;
 "pr merge"*--auto*) [ "${STUB_AUTO_FAIL:-no}" = no ] || { echo "auto-merge refused" >&2; exit 1; } ;;
 "pr checks"*"--jq length"*) echo "${STUB_COUNT:-2}" ;;
 "pr checks"*--watch*) ;;
@@ -31,6 +31,8 @@ case "$*" in
 esac
 EOF
 chmod +x "${stub}/gh"
+printf '#!/bin/sh\necho 48\n' >"${stub}/date"
+chmod +x "${stub}/date"
 
 failed=0
 
@@ -68,6 +70,12 @@ run schedule_opens_and_arms_new_promotion schedule 0 "pr merge 42 -R h3nc4/app -
 run schedule_reuses_open_promotion schedule 0 "pr merge 7 -R h3nc4/app --auto --squash" "pr create" STUB_FILES=3 STUB_PR=7
 run dispatch_syncs_before_promoting workflow_dispatch 0 "merges -f base=deps -f head=main" - STUB_FILES=0
 run promotion_never_deletes_deps schedule 0 "--auto --squash" "--delete-branch" STUB_FILES=1
+run push_to_deps_opens_draft push 0 "pr create -R h3nc4/app --head deps --base main --draft" "merges" GITHUB_REF=refs/heads/deps STUB_FILES=2
+run push_to_deps_with_nothing_new_opens_nothing push 0 "compare/main...deps" "pr create" GITHUB_REF=refs/heads/deps STUB_FILES=0
+run push_to_deps_reuses_open_draft push 0 "pr list" "pr create" GITHUB_REF=refs/heads/deps STUB_FILES=2 STUB_PR=7
+run push_to_main_only_syncs push 0 "merges -f base=deps -f head=main" "pr create" GITHUB_REF=refs/heads/main STUB_FILES=2
+run promotion_readies_the_draft schedule 0 "pr ready 7 -R h3nc4/app" - STUB_FILES=2 STUB_PR=7 STUB_DRAFT=true
+run promotion_names_the_week schedule 0 "pr edit 7 -R h3nc4/app --title update dependencies for week 48" "pr ready" STUB_FILES=2 STUB_PR=7
 run other_event_is_refused pull_request 1 - "merges"
 run passed_promotion_merges_directly schedule 0 "pr merge 7 -R h3nc4/app --squash --subject" - STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_CHECKS=true
 run unchecked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_COUNT=2 STUB_CHECKS=false
