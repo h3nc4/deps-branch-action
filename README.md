@@ -6,7 +6,7 @@ Renovate merges each dependency update into an integration branch, `deps`, after
 
 On every push to the default branch, the action merges the default branch into `deps` through the merges API, so `deps` always holds the latest code and the next promotion lists only new updates. It creates `deps` from the default branch the first time. A merge conflict fails the run and leaves `deps` as it was.
 
-On the weekly schedule, or when dispatched, it syncs first. If `deps` has no change the default branch lacks, it stops. Otherwise it opens a pull request from `deps` to the default branch titled `update dependencies for week N`, or reuses the open one. Then it turns on auto-merge with a squash. GitHub merges it once the default branch's required checks pass. The pull request comes from `deps` itself, which is never deleted, and since every push to the default branch is synced into `deps` the pull request is never behind.
+On the weekly schedule, or when dispatched, it syncs first. If `deps` has no change the default branch lacks, it stops. Otherwise it opens a pull request from `deps` to the default branch titled `update dependencies for week N`, or reuses the open one. Then it turns on auto-merge with a squash. GitHub merges it once the default branch's required checks pass. GitHub refuses auto-merge where the default branch doesn't require checks. There the action waits up to an hour for the pull request's checks and merges it itself once they all pass. A promotion that doesn't start any check is merged too, because every update in it passed its own. The pull request comes from `deps` itself, which is never deleted, and since every push to the default branch is synced into `deps` the pull request is never behind.
 
 ## Usage
 
