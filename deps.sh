@@ -40,8 +40,20 @@ promote() {
 		number="${url##*/}"
 	fi
 	title="$(gh pr view "${number}" -R "${repo}" --json title --jq .title)"
-	gh pr merge "${number}" -R "${repo}" --auto --squash --subject "${title} (#${number})" --body ""
-	echo "::notice::#${number} merges itself once its checks pass"
+	if out="$(gh pr merge "${number}" -R "${repo}" --auto --squash --subject "${title} (#${number})" --body "" 2>&1)"; then
+		echo "::notice::#${number} merges itself once its checks pass"
+		return
+	fi
+	state="$(gh pr view "${number}" -R "${repo}" --json mergeStateStatus --jq .mergeStateStatus)"
+	passed="$(gh pr checks "${number}" -R "${repo}" --json bucket \
+		--jq '[.[].bucket] | length > 0 and all(. == "pass" or . == "skipping")')" || passed=false
+	if [ "${state}" != CLEAN ] || [ "${passed}" != true ]; then
+		printf '%s\n' "${out}" >&2
+		echo "::error::could not turn on auto-merge for #${number}, which is ${state} with checks passed=${passed}"
+		exit 1
+	fi
+	gh pr merge "${number}" -R "${repo}" --squash --subject "${title} (#${number})" --body ""
+	echo "::notice::#${number} had already passed its checks, so it is merged now"
 }
 
 case "${GITHUB_EVENT_NAME:?}" in
