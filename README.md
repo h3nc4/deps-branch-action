@@ -6,11 +6,13 @@ Renovate merges each dependency update into an integration branch, `deps`, after
 
 On every push to the default branch, the action merges the default branch into `deps` through the merges API, so `deps` always holds the latest code and the next promotion lists only new updates. It creates `deps` from the default branch the first time. A merge conflict fails the run and leaves `deps` as it was.
 
-On the weekly schedule, or when dispatched, it syncs first. If `deps` has no change the default branch lacks, it stops. Otherwise it opens a pull request from `deps` to the default branch titled `update dependencies for week N`, or reuses the open one. Then it turns on auto-merge with a squash. GitHub merges it once the default branch's required checks pass. GitHub refuses auto-merge where the default branch doesn't require checks. There the action waits up to an hour for the pull request's checks and merges it itself once they all pass. A promotion that doesn't start any check is merged too, because every update in it passed its own. The pull request comes from `deps` itself, which is never deleted, and since every push to the default branch is synced into `deps` the pull request is never behind.
+On every push to `deps`, once Renovate merges an update there, it opens a draft pull request from `deps` to the default branch, or keeps the open one. CI runs on that draft after every update, so two updates that pass alone but break together show up during the week.
+
+On the weekly schedule, or when dispatched, it syncs first. If `deps` has no change the default branch lacks, it stops. Otherwise it takes the draft, or opens the pull request when there is none, titles it `update dependencies for week N` and marks it ready. Then it turns on auto-merge with a squash. GitHub merges it once the default branch's required checks pass. GitHub refuses auto-merge where the default branch doesn't require checks. There the action waits up to an hour for the pull request's checks and merges it itself once they all pass. A promotion that doesn't start any check is merged too, because every update in it passed its own. The pull request comes from `deps` itself, which is never deleted, and since every push to the default branch is synced into `deps` the pull request is never behind.
 
 ## Usage
 
-Add a workflow that runs on push to the default branch, on a weekly schedule and on dispatch, with a GitHub App installation token. A pull request opened with `GITHUB_TOKEN` starts checks that wait for approval.
+Add a workflow that runs on push to the default branch and to `deps`, on a weekly schedule and on dispatch, with a GitHub App installation token. A pull request opened with `GITHUB_TOKEN` starts checks that wait for approval.
 
 ```yaml
 name: Dependency branch
@@ -19,6 +21,7 @@ on:
   push:
     branches:
       - main
+      - deps
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:
@@ -58,6 +61,8 @@ Point Renovate at `deps` with the preset in this repository, which also stops Re
 ```
 
 Every CI workflow whose `pull_request` trigger lists branches needs `deps` in that list, because the automerge step only merges an update after its checks finish.
+
+A `baseBranchPatterns` in the repository's own Renovate config overrides the preset, so remove it. A `paths` filter on the only CI workflow leaves an update to another file without a check, so add `.github/workflows/**` to it.
 
 ## Repository settings
 
