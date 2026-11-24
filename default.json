@@ -1,0 +1,9 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Opens every Renovate pull request against deps, which deps-branch-action promotes to the default branch once a week",
+  "baseBranchPatterns": ["deps"],
+  "rebaseWhen": "conflicted",
+  "vulnerabilityAlerts": {
+    "enabled": false
+  }
+}

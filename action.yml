@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Henrique Almeida <me@h3nc4.com>
+
+name: Dependency branch
+description: >
+  Keeps an integration branch that Renovate merges into in step with the default branch, and
+  once a week promotes it to the default branch as one squashed commit.
+author: Henrique Almeida
+branding:
+  icon: git-pull-request
+  color: blue
+
+inputs:
+  token:
+    description: >
+      A GitHub App installation token with contents, pull-requests and workflows write. A
+      GITHUB_TOKEN would open a pull request whose checks wait for approval.
+    required: true
+  branch:
+    description: The integration branch.
+    required: false
+    default: deps
+
+runs:
+  using: composite
+  steps:
+    - name: Sync or promote the integration branch
+      shell: sh
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        DEPS_BRANCH: ${{ inputs.branch }}
+      run: "${GITHUB_ACTION_PATH}/deps.sh"

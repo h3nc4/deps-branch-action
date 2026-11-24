@@ -1,0 +1,72 @@
+# deps-branch-action
+
+Renovate merges each dependency update into an integration branch, `deps`, after that update passes CI on its own. This action merges the default branch into `deps` after every push to it and, once a week, promotes `deps` to the default branch as one squashed commit. The default branch then gets one dependency commit a week instead of one per update.
+
+## How it works
+
+On every push to the default branch, the action merges the default branch into `deps` through the merges API, so `deps` always holds the latest code and the next promotion lists only new updates. It creates `deps` from the default branch the first time. A merge conflict fails the run and leaves `deps` as it was.
+
+On the weekly schedule, or when dispatched, it syncs first. If `deps` has no change the default branch lacks, it stops. Otherwise it opens a pull request from `deps` to the default branch titled `update dependencies for week N`, or reuses the open one. Then it turns on auto-merge with a squash. GitHub merges it once the default branch's required checks pass. The pull request comes from `deps` itself, which is never deleted, and since every push to the default branch is synced into `deps` the pull request is never behind.
+
+## Usage
+
+Add a workflow that runs on push to the default branch, on a weekly schedule and on dispatch, with a GitHub App installation token. A pull request opened with `GITHUB_TOKEN` starts checks that wait for approval.
+
+```yaml
+name: Dependency branch
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  deps:
+    name: Sync or promote deps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request an app token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Run h3nc4/deps-branch-action
+        uses: h3nc4/deps-branch-action@v1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+```
+
+Point Renovate at `deps` with the preset in this repository, which also stops Renovate rebasing on every merge into `deps` and turns off its vulnerability pull requests:
+
+```json
+{
+  "extends": ["config:best-practices", "github>h3nc4/deps-branch-action"]
+}
+```
+
+Every CI workflow whose `pull_request` trigger lists branches needs `deps` in that list, because the automerge step only merges an update after its checks finish.
+
+## Repository settings
+
+- **Allow auto-merge**, which the promotion uses.
+- **A ruleset on `deps`** that blocks deletion and force pushes.
+- **Dependabot security updates**, which open security fixes against the default branch directly, since the preset turns off Renovate's.
+
+The app needs contents, pull requests and workflows write. Workflows write is needed because a sync can bring workflow changes into `deps`.
+
+## Limits
+
+A change on the default branch that conflicts with `deps` stops the sync until someone merges the default branch into `deps` by hand. `rebaseWhen: conflicted` lets two updates that each pass alone meet in `deps` untested together, and the promotion's checks on the default branch catch such a pair before it is merged.
