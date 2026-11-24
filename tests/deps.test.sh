@@ -21,7 +21,10 @@ case "$*" in
 "api repos/h3nc4/app/compare/main...deps --jq .files | length") echo "${STUB_FILES:-0}" ;;
 "pr list"*) echo "${STUB_PR:-}" ;;
 "pr create"*) echo "https://github.com/h3nc4/app/pull/42" ;;
+"pr view"*mergeStateStatus*) echo "${STUB_STATE:-BLOCKED}" ;;
 "pr view"*) echo "${STUB_TITLE:-update dependencies for week 48}" ;;
+"pr merge"*--auto*) [ "${STUB_AUTO_FAIL:-no}" = no ] || { echo "auto-merge refused" >&2; exit 1; } ;;
+"pr checks"*) echo "${STUB_CHECKS:-true}" ;;
 *) ;;
 esac
 EOF
@@ -64,6 +67,9 @@ run schedule_reuses_open_promotion schedule 0 "pr merge 7 -R h3nc4/app --auto --
 run dispatch_syncs_before_promoting workflow_dispatch 0 "merges -f base=deps -f head=main" - STUB_FILES=0
 run promotion_never_deletes_deps schedule 0 "--auto --squash" "--delete-branch" STUB_FILES=1
 run other_event_is_refused pull_request 1 - "merges"
+run passed_promotion_merges_directly schedule 0 "pr merge 7 -R h3nc4/app --squash --subject" - STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_CHECKS=true
+run unchecked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=CLEAN STUB_CHECKS=false
+run blocked_promotion_is_not_merged schedule 1 - "pr merge 7 -R h3nc4/app --squash --subject" STUB_FILES=1 STUB_PR=7 STUB_AUTO_FAIL=yes STUB_STATE=BLOCKED
 
 echo "deps.test.sh: ${failed} failures"
 [ "${failed}" -eq 0 ]
